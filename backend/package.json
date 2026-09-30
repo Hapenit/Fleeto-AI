@@ -79,5 +79,8 @@
       "esbuild",
       "workerd"
     ]
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   }
 }
