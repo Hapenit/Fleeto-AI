@@ -15,10 +15,11 @@ async function bootstrap() {
     requestIdMiddleware.use(request, response, next),
   );
   app.enableShutdownHooks();
-  const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:3000')
-    .split(',')
-    .map((origin) => origin.trim())
-    .filter(Boolean);
+  const allowedOrigins = [
+    'http://localhost:3000',
+    'https://fleeto-frontend-25t4.onrender.com',
+    ...(process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(',') : [])
+  ].map((origin) => origin.trim()).filter(Boolean);
 
   app.enableCors({
     origin: allowedOrigins,
