@@ -1,0 +1,2400 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  ADMIN
+  MARKETING_USER
+}
+
+enum Status {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+model User {
+  id           String    @id @default(uuid())
+  firstName    String
+  lastName     String
+  email        String    @unique
+  phone        String?
+  passwordHash String
+  role         Role      @default(MARKETING_USER)
+  status       Status    @default(ACTIVE)
+  avatarUrl    String?
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  refreshTokens   RefreshToken[]
+  requirements    Requirement[]
+  statusHistories RequirementStatusHistory[]
+  aiExtractions   AIRequirementExtraction[]
+  createdVendors  Vendor[]                   @relation("VendorCreator")
+  updatedVendors  Vendor[]                   @relation("VendorUpdater")
+
+  eligibilityRuns VendorEligibilityRun[]
+
+  rankingRuns           VendorRankingRun[]
+  rankingConfigurations VendorRankingWeightConfiguration[]
+  outreachSelections    VendorOutreachSelection[]
+  createdDecisions      ProcurementDecision[]              @relation("ProcurementDecisionCreatedBy")
+  confirmedDecisions    ProcurementDecision[]              @relation("ProcurementDecisionConfirmedBy")
+  procurementAudits     ProcurementDecisionAudit[]
+  recordingAccessLogs   CallRecordingAccessLog[]
+  requestedFollowUps    FollowUp[]                         @relation("FollowUpRequestedBy")
+  assignedFollowUps     FollowUp[]                         @relation("FollowUpAssignedTo")
+  createdFollowUps      FollowUp[]                         @relation("FollowUpCreatedBy")
+  followUpAuditLogs     FollowUpAudit[]                    @relation("FollowUpAuditUser")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  action    String
+  entity    String?
+  entityId  String?
+  metadata  Json?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+}
+
+enum RequirementStatus {
+  DRAFT
+  READY
+  VALIDATION_REQUIRED
+  MATCHING
+  CALLING
+  QUOTATION_RECEIVED
+  UNDER_REVIEW
+  VENDOR_SELECTED
+  COMPLETED
+  CANCELLED
+}
+
+enum CargoWeightUnit {
+  KG
+  TON
+  GRAM
+}
+
+enum QuantityUnit {
+  UNIT
+  PALLET
+  BOX
+  CONTAINER
+  LOAD
+  OTHER
+}
+
+enum BudgetCurrency {
+  INR
+}
+
+enum RequirementSource {
+  MANUAL
+  AI_ASSISTED
+  IMPORTED
+}
+
+model Requirement {
+  id                String @id @default(uuid())
+  requirementNumber String @unique
+
+  customerName    String?
+  customerCompany String?
+  customerPhone   String?
+  customerEmail   String?
+
+  pickupLocation String?
+  pickupAddress  String?
+  pickupCity     String?
+  pickupState    String?
+  pickupPincode  String?
+
+  deliveryLocation String?
+  deliveryAddress  String?
+  deliveryCity     String?
+  deliveryState    String?
+  deliveryPincode  String?
+
+  pickupDate       DateTime?
+  pickupTime       String?
+  deliveryDeadline DateTime?
+
+  cargoType        String?
+  cargoDescription String?
+  cargoWeight      Float?
+  cargoWeightUnit  CargoWeightUnit?
+
+  cargoQuantity     Int?
+  cargoQuantityUnit QuantityUnit?
+
+  vehicleType     String?
+  vehicleBodyType String?
+
+  specialHandlingRequired Boolean @default(false)
+  specialHandlingDetails  String?
+
+  loadingRequired Boolean @default(false)
+  loadingDetails  String?
+
+  unloadingRequired Boolean @default(false)
+  unloadingDetails  String?
+
+  budget         Float?
+  budgetCurrency BudgetCurrency?
+
+  preferredVendorConditions String?
+  additionalNotes           String?
+
+  source RequirementSource @default(MANUAL)
+  status RequirementStatus @default(DRAFT)
+
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  createdBy     User                       @relation(fields: [createdById], references: [id])
+  statusHistory RequirementStatusHistory[]
+  aiExtractions AIRequirementExtraction[]
+
+  eligibilityRuns        VendorEligibilityRun[]
+  eligibilityEvaluations VendorEligibilityEvaluation[]
+
+  rankingRuns          VendorRankingRun[]
+  rankingEvaluations   VendorRankingEvaluation[]
+  outreachSelections   VendorOutreachSelection[]
+  voiceCalls           VoiceCall[]
+  negotiationPolicies  NegotiationPolicy[]
+  negotiations         NegotiationSession[]
+  quotations           Quotation[]
+  comparisons          QuotationComparison[]
+  procurementDecisions ProcurementDecision[]
+  followUps            FollowUp[]
+}
+
+model RequirementStatusHistory {
+  id            String             @id @default(uuid())
+  requirementId String
+  fromStatus    RequirementStatus?
+  toStatus      RequirementStatus
+  changedById   String
+  reason        String?
+  metadata      Json?
+  createdAt     DateTime           @default(now())
+
+  requirement Requirement @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+  changedBy   User        @relation(fields: [changedById], references: [id])
+}
+
+enum AIExtractionStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  NEEDS_CLARIFICATION
+  FAILED
+  APPLIED
+  REJECTED
+}
+
+model AIRequirementExtraction {
+  id            String             @id @default(uuid())
+  requirementId String? // Nullable because user can start from AI extraction before creating requirement
+  inputText     String
+  extractedData Json?
+  missingFields Json?
+  ambiguities   Json?
+  confidence    Float?
+  summary       String?
+  provider      String
+  model         String
+  promptVersion String
+  status        AIExtractionStatus @default(PENDING)
+
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  requirement Requirement? @relation(fields: [requirementId], references: [id])
+  createdBy   User         @relation(fields: [createdById], references: [id])
+}
+
+enum VendorStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  PENDING_VERIFICATION
+}
+
+enum VendorLanguage {
+  TA
+  TA_EN
+  EN
+  HI
+  OTHER
+}
+
+enum VendorLocationType {
+  OFFICE
+  YARD
+  DEPOT
+  GARAGE
+  OTHER
+}
+
+enum ServiceRegionType {
+  PICKUP
+  DELIVERY
+  BOTH
+}
+
+enum VendorAvailabilityStatus {
+  AVAILABLE
+  BUSY
+  UNKNOWN
+}
+
+model Vendor {
+  id                String  @id @default(uuid())
+  vendorCode        String  @unique
+  companyName       String
+  businessName      String?
+  contactPersonName String
+  primaryPhone      String
+  alternatePhone    String?
+  whatsappPhone     String?
+  email             String?
+
+  preferredLanguage VendorLanguage @default(EN)
+
+  status      VendorStatus @default(PENDING_VERIFICATION)
+  callEnabled Boolean      @default(false)
+
+  preferredCallStartTime String?
+  preferredCallEndTime   String?
+  timezone               String  @default("Asia/Kolkata")
+
+  notes String?
+
+  createdById String
+  updatedById String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  createdBy User  @relation("VendorCreator", fields: [createdById], references: [id])
+  updatedBy User? @relation("VendorUpdater", fields: [updatedById], references: [id])
+
+  locations           VendorLocation[]
+  serviceRegions      VendorServiceRegion[]
+  vehicleCapabilities VendorVehicleCapability[]
+  cargoCapabilities   VendorCargoCapability[]
+  availabilities      VendorAvailability[]
+  performance         VendorPerformance?
+
+  eligibilityEvaluations VendorEligibilityEvaluation[]
+
+  rankingEvaluations  VendorRankingEvaluation[]
+  outreachSelections  VendorOutreachSelection[]
+  voiceCalls          VoiceCall[]
+  negotiations        NegotiationSession[]
+  quotations          Quotation[]
+  comparisonItems     QuotationComparisonItem[]
+  selectedInDecisions ProcurementDecision[]
+  decisionItems       ProcurementDecisionItem[]
+  followUps           FollowUp[]
+
+  @@index([vendorCode])
+  @@index([companyName])
+  @@index([status])
+  @@index([preferredLanguage])
+  @@index([primaryPhone])
+}
+
+model VendorLocation {
+  id       String @id @default(uuid())
+  vendorId String
+
+  locationType VendorLocationType @default(OFFICE)
+  address      String?
+  city         String
+  state        String?
+  pincode      String?
+  latitude     Float?
+  longitude    Float?
+
+  isPrimary Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@index([city])
+  @@index([state])
+}
+
+model VendorServiceRegion {
+  id       String @id @default(uuid())
+  vendorId String
+
+  city       String
+  state      String?
+  pincode    String?
+  regionType ServiceRegionType @default(BOTH)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@index([city])
+  @@index([state])
+}
+
+model VendorVehicleCapability {
+  id       String @id @default(uuid())
+  vendorId String
+
+  vehicleType     String
+  vehicleBodyType String?
+
+  minimumCapacity Float?
+  maximumCapacity Float?
+  capacityUnit    String?
+
+  vehicleCount Int @default(1)
+
+  isPrimary Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@index([vehicleType])
+  @@index([maximumCapacity])
+}
+
+model VendorCargoCapability {
+  id       String @id @default(uuid())
+  vendorId String
+
+  cargoType     String
+  maximumWeight Float?
+  weightUnit    String?
+
+  specialHandlingSupported Boolean @default(false)
+  notes                    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@index([cargoType])
+}
+
+model VendorAvailability {
+  id       String @id @default(uuid())
+  vendorId String
+
+  availabilityStatus VendorAvailabilityStatus @default(UNKNOWN)
+
+  availableFrom  DateTime?
+  availableUntil DateTime?
+
+  notes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+}
+
+model VendorPerformance {
+  id       String @id @default(uuid())
+  vendorId String @unique
+
+  totalTrips      Int @default(0)
+  successfulTrips Int @default(0)
+  cancelledTrips  Int @default(0)
+  noShowTrips     Int @default(0)
+
+  averageResponseTimeMinutes Float?
+
+  averageQuotedPrice Float?
+  averageFinalPrice  Float?
+
+  currency String @default("INR")
+
+  lastTripDate DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+}
+
+enum EligibilityRuleType {
+  MANDATORY
+  CONDITIONAL
+  INFORMATIONAL
+}
+
+enum RuleStatus {
+  PASS
+  FAIL
+  REVIEW
+  NOT_APPLICABLE
+}
+
+enum RuleSeverity {
+  ERROR
+  WARNING
+  INFO
+}
+
+enum EvaluationStatus {
+  COMPLETED
+  NEEDS_REVIEW
+  FAILED
+}
+
+enum EvaluationRunStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+model VendorEligibilityRun {
+  id            String @id @default(uuid())
+  runNumber     String @unique
+  requirementId String
+
+  engineVersion String
+
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  totalVendors     Int @default(0)
+  eligibleCount    Int @default(0)
+  ineligibleCount  Int @default(0)
+  needsReviewCount Int @default(0)
+
+  status EvaluationRunStatus @default(QUEUED)
+
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  requirement Requirement                   @relation(fields: [requirementId], references: [id])
+  createdBy   User                          @relation(fields: [createdById], references: [id])
+  evaluations VendorEligibilityEvaluation[]
+
+  @@index([requirementId])
+}
+
+model VendorEligibilityEvaluation {
+  id               String @id @default(uuid())
+  evaluationNumber String @unique
+  runId            String
+  requirementId    String
+  vendorId         String
+
+  status     EvaluationStatus
+  eligible   Boolean          @default(false)
+  confidence Float            @default(0)
+
+  evaluatedAt   DateTime @default(now())
+  engineVersion String
+
+  passedRules        Int @default(0)
+  failedRules        Int @default(0)
+  reviewRules        Int @default(0)
+  notApplicableRules Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  run         VendorEligibilityRun          @relation(fields: [runId], references: [id], onDelete: Cascade)
+  requirement Requirement                   @relation(fields: [requirementId], references: [id])
+  vendor      Vendor                        @relation(fields: [vendorId], references: [id])
+  ruleResults VendorEligibilityRuleResult[]
+
+  @@index([runId])
+  @@index([requirementId])
+  @@index([vendorId])
+  @@index([status])
+}
+
+model VendorEligibilityRuleResult {
+  id           String @id @default(uuid())
+  evaluationId String
+
+  ruleCode String
+  ruleName String
+
+  status   RuleStatus
+  severity RuleSeverity
+
+  message String
+  details Json?
+
+  createdAt DateTime @default(now())
+
+  evaluation VendorEligibilityEvaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+
+  @@index([evaluationId])
+  @@index([ruleCode])
+}
+
+enum MatchFactorStatus {
+  PASS
+  PARTIAL
+  WEAK
+  NOT_AVAILABLE
+}
+
+enum RankingEvaluationStatus {
+  RANKED
+  EXCLUDED
+  NEEDS_REVIEW
+}
+
+enum RankingRunStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum OutreachSelectionStatus {
+  SELECTED
+  REMOVED
+}
+
+model VendorRankingWeightConfiguration {
+  id       String  @id @default(uuid())
+  version  String  @unique
+  isActive Boolean @default(false)
+
+  routeWeight           Float @default(25)
+  vehicleWeight         Float @default(20)
+  capacityWeight        Float @default(15)
+  cargoWeight           Float @default(10)
+  availabilityWeight    Float @default(10)
+  serviceCoverageWeight Float @default(5)
+  performanceWeight     Float @default(10)
+  commercialWeight      Float @default(3)
+  communicationWeight   Float @default(2)
+
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  createdBy User @relation(fields: [createdById], references: [id])
+}
+
+model VendorRankingRun {
+  id            String @id @default(uuid())
+  runNumber     String @unique
+  requirementId String
+
+  engineVersion              String
+  weightConfigurationVersion String
+
+  candidateCount Int @default(0)
+  rankedCount    Int @default(0)
+  excludedCount  Int @default(0)
+
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  status RankingRunStatus @default(QUEUED)
+
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  requirement Requirement               @relation(fields: [requirementId], references: [id])
+  createdBy   User                      @relation(fields: [createdById], references: [id])
+  evaluations VendorRankingEvaluation[]
+
+  @@index([requirementId])
+}
+
+model VendorRankingEvaluation {
+  id                      String  @id @default(uuid())
+  rankingNumber           String  @unique
+  runId                   String
+  requirementId           String
+  vendorId                String
+  eligibilityEvaluationId String?
+
+  rank            Int?
+  score           Float?
+  scorePercentage Float?
+
+  status RankingEvaluationStatus
+
+  engineVersion              String
+  weightConfigurationVersion String
+  evaluatedAt                DateTime @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  run           VendorRankingRun          @relation(fields: [runId], references: [id], onDelete: Cascade)
+  requirement   Requirement               @relation(fields: [requirementId], references: [id])
+  vendor        Vendor                    @relation(fields: [vendorId], references: [id])
+  factorResults VendorMatchFactorResult[]
+
+  @@index([runId])
+  @@index([requirementId])
+  @@index([vendorId])
+  @@index([rank])
+  @@index([score])
+}
+
+model VendorMatchFactorResult {
+  id                  String @id @default(uuid())
+  rankingEvaluationId String
+
+  factorCode String
+  factorName String
+
+  weight          Float
+  rawScore        Float
+  normalizedScore Float
+
+  status MatchFactorStatus
+
+  reason  String?
+  details Json?
+
+  createdAt DateTime @default(now())
+
+  evaluation VendorRankingEvaluation @relation(fields: [rankingEvaluationId], references: [id], onDelete: Cascade)
+
+  @@index([rankingEvaluationId])
+  @@index([factorCode])
+}
+
+model VendorOutreachSelection {
+  id                  String  @id @default(uuid())
+  requirementId       String
+  vendorId            String
+  rankingEvaluationId String?
+
+  status OutreachSelectionStatus @default(SELECTED)
+  notes  String?
+
+  selectedById String
+  selectedAt   DateTime @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  requirement Requirement @relation(fields: [requirementId], references: [id])
+  vendor      Vendor      @relation(fields: [vendorId], references: [id])
+  selectedBy  User        @relation(fields: [selectedById], references: [id])
+
+  @@index([requirementId])
+  @@index([vendorId])
+}
+
+enum CallStatus {
+  QUEUED
+  INITIATING
+  RINGING
+  CONNECTED
+  GREETING
+  CONVERSATION
+  COMPLETING
+  COMPLETED
+
+  NO_ANSWER
+  BUSY
+  FAILED
+  CANCELLED
+
+  CALLBACK_REQUESTED
+  ESCALATED
+}
+
+enum CallOutcomeType {
+  QUOTE_RECEIVED
+  AVAILABLE_NO_QUOTE
+  NOT_AVAILABLE
+  CALLBACK_REQUESTED
+  NO_ANSWER
+  BUSY
+  FAILED
+  ESCALATED
+  COMPLETED_WITHOUT_QUOTE
+}
+
+model VoiceCall {
+  id         String @id @default(uuid())
+  callNumber String @unique
+
+  requirementId       String
+  vendorId            String
+  outreachSelectionId String?
+
+  provider       String
+  providerCallId String? @unique
+
+  status CallStatus @default(QUEUED)
+
+  phoneNumber String
+  language    String @default("TA")
+
+  startedAt   DateTime?
+  connectedAt DateTime?
+  endedAt     DateTime?
+
+  durationSeconds Int?
+
+  failureReason String?
+  recordingUrl  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  requirement      Requirement           @relation(fields: [requirementId], references: [id])
+  vendor           Vendor                @relation(fields: [vendorId], references: [id])
+  session          CallSession?
+  transcripts      CallTranscript[]
+  events           CallEvent[]
+  extraction       CallExtraction?
+  outcome          CallOutcome?
+  analysis         ConversationAnalysis?
+  negotiations     NegotiationSession[]
+  quotations       Quotation[]
+  recording        CallRecording?
+  followUpsCreated FollowUp[]
+  followUpAttempts FollowUpAttempt[]     @relation("FollowUpAttemptCall")
+
+  @@index([requirementId])
+  @@index([vendorId])
+  @@index([status])
+  @@index([providerCallId])
+}
+
+model CallSession {
+  id     String @id @default(uuid())
+  callId String @unique
+
+  sessionId String @unique
+
+  currentState    String @default("INTRODUCTION")
+  currentLanguage String @default("TA")
+
+  conversationTurn Int @default(0)
+
+  startedAt      DateTime?
+  lastActivityAt DateTime?
+  endedAt        DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  call VoiceCall @relation(fields: [callId], references: [id], onDelete: Cascade)
+}
+
+model CallTranscript {
+  id     String @id @default(uuid())
+  callId String
+
+  speaker String // AI, VENDOR, SYSTEM
+  text    String @db.Text
+
+  language   String?
+  confidence Float?
+
+  sequenceNumber Int
+
+  startTime Float?
+  endTime   Float?
+
+  createdAt DateTime @default(now())
+
+  call     VoiceCall                     @relation(fields: [callId], references: [id], onDelete: Cascade)
+  evidence ConversationFindingEvidence[]
+
+  @@index([callId])
+  @@index([sequenceNumber])
+}
+
+model CallEvent {
+  id     String @id @default(uuid())
+  callId String
+
+  eventType String
+
+  payload Json?
+
+  timestamp DateTime @default(now())
+
+  call VoiceCall @relation(fields: [callId], references: [id], onDelete: Cascade)
+
+  @@index([callId])
+  @@index([eventType])
+}
+
+model CallExtraction {
+  id     String @id @default(uuid())
+  callId String @unique
+
+  vendorAvailable  Boolean?
+  vehicleAvailable Boolean?
+
+  quotedAmount Float?
+  currency     String? @default("INR")
+
+  pickupConfirmation   Boolean?
+  deliveryConfirmation Boolean?
+
+  estimatedDeliveryTime String?
+
+  vendorConditions Json? @default("[]")
+
+  vendorRemarks String? @db.Text
+
+  confidence Float?
+
+  rawExtraction Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  call VoiceCall @relation(fields: [callId], references: [id], onDelete: Cascade)
+}
+
+model CallOutcome {
+  id     String @id @default(uuid())
+  callId String @unique
+
+  outcome CallOutcomeType
+
+  reason  String? @db.Text
+  summary String? @db.Text
+
+  nextAction String?
+
+  followUpAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  call VoiceCall @relation(fields: [callId], references: [id], onDelete: Cascade)
+}
+
+// Conversation Analysis
+
+enum ConversationAnalysisStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  NEEDS_REVIEW
+  FAILED
+}
+
+enum VendorInterest {
+  INTERESTED
+  MAYBE_INTERESTED
+  NOT_INTERESTED
+  UNAVAILABLE
+  CALLBACK_REQUESTED
+  UNKNOWN
+}
+
+enum AvailabilityStatus {
+  AVAILABLE
+  NOT_AVAILABLE
+  PARTIALLY_AVAILABLE
+  CALLBACK_REQUIRED
+  UNKNOWN
+}
+
+enum ConversationQuality {
+  GOOD
+  PARTIAL
+  POOR
+  UNKNOWN
+}
+
+enum Sentiment {
+  POSITIVE
+  NEUTRAL
+  NEGATIVE
+  MIXED
+  UNKNOWN
+}
+
+enum FindingSeverity {
+  INFO
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model ConversationAnalysis {
+  id            String @id @default(uuid())
+  callId        String @unique
+  requirementId String
+  vendorId      String
+
+  status          ConversationAnalysisStatus @default(PENDING)
+  analysisVersion String
+  provider        String
+  model           String
+
+  overallSummary String? @db.Text
+
+  vendorInterest     VendorInterest     @default(UNKNOWN)
+  availabilityStatus AvailabilityStatus @default(UNKNOWN)
+
+  quoteStatus   String?
+  quoteAmount   Float?
+  quoteCurrency String?
+
+  conversationQuality    ConversationQuality @default(UNKNOWN)
+  transcriptCompleteness String?             @db.Text
+
+  sentiment           Sentiment @default(UNKNOWN)
+  sentimentConfidence Float?
+
+  analysisConfidence Float?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  completedAt DateTime?
+
+  call     VoiceCall                 @relation(fields: [callId], references: [id], onDelete: Cascade)
+  findings ConversationFinding[]
+  runs     ConversationAnalysisRun[]
+
+  @@index([callId])
+  @@index([requirementId])
+  @@index([vendorId])
+  @@index([status])
+}
+
+model ConversationFinding {
+  id         String @id @default(uuid())
+  analysisId String
+
+  type     String
+  category String?
+  severity FindingSeverity @default(INFO)
+
+  title       String?
+  description String  @db.Text
+
+  explicit   Boolean @default(false)
+  confidence Float?
+
+  createdAt DateTime @default(now())
+
+  analysis ConversationAnalysis          @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+  evidence ConversationFindingEvidence[]
+
+  @@index([analysisId])
+  @@index([type])
+}
+
+model ConversationFindingEvidence {
+  id           String @id @default(uuid())
+  findingId    String
+  transcriptId String
+
+  sequenceNumber Int
+  startTime      Float?
+  endTime        Float?
+
+  quotedText String @db.Text
+
+  createdAt DateTime @default(now())
+
+  finding    ConversationFinding @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  transcript CallTranscript      @relation(fields: [transcriptId], references: [id], onDelete: Cascade)
+
+  @@index([findingId])
+}
+
+model ConversationAnalysisRun {
+  id         String @id @default(uuid())
+  analysisId String
+
+  provider      String
+  model         String
+  promptVersion String
+
+  inputHash String?
+
+  status String
+
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  tokenUsage Int?
+  latencyMs  Int?
+
+  errorCode    String?
+  errorMessage String? @db.Text
+
+  createdAt DateTime @default(now())
+
+  analysis ConversationAnalysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+
+  @@index([analysisId])
+}
+
+// =========================================================================
+// MODULE 10 — AI NEGOTIATION ENGINE
+// =========================================================================
+
+enum NegotiationMode {
+  MANUAL
+  AI_ASSISTED
+  AI_AUTONOMOUS
+}
+
+enum NegotiationStatus {
+  NEGOTIATION_NOT_STARTED
+  QUOTE_RECEIVED
+  ASSESSING
+  COUNTER_OFFER_PENDING
+  COUNTER_OFFER_SENT
+  VENDOR_COUNTER_RECEIVED
+  VENDOR_ACCEPTED
+  VENDOR_REJECTED
+  PRICE_AGREED
+  LIMIT_REACHED
+  MAX_ATTEMPTS_REACHED
+  VENDOR_NOT_FLEXIBLE
+  CONDITIONS_CHANGED
+  HUMAN_APPROVAL_REQUIRED
+  ESCALATED
+  STOPPED
+  COMPLETED
+  FAILED
+  WAITING_FOR_CONFIRMATION
+  POLICY_VIOLATION
+  CALLBACK_REQUESTED
+}
+
+enum NegotiationSpeaker {
+  AI
+  VENDOR
+  SYSTEM
+  HUMAN
+}
+
+enum NegotiationAction {
+  INITIAL_VENDOR_QUOTE
+  AI_COUNTER_OFFER
+  VENDOR_COUNTER_OFFER
+  VENDOR_ACCEPTED
+  VENDOR_REJECTED
+  PRICE_CONFIRMATION
+  CONDITION_CHANGE
+  HUMAN_APPROVAL
+  STOP
+  ESCALATE
+}
+
+enum NegotiationResultStatus {
+  PRICE_AGREED
+  BEST_PRICE_RECEIVED
+  NO_NEGOTIATION
+  VENDOR_REJECTED
+  LIMIT_REACHED
+  MAX_ATTEMPTS_REACHED
+  HUMAN_APPROVAL_REQUIRED
+  CALLBACK_REQUIRED
+  FAILED
+  STOPPED
+}
+
+enum EscalationStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  REJECTED
+}
+
+model NegotiationPolicy {
+  id            String @id @default(uuid())
+  requirementId String @unique // active policy per requirement
+
+  enabled Boolean         @default(true)
+  mode    NegotiationMode @default(AI_ASSISTED)
+
+  targetPrice            Float?
+  maximumAuthorizedPrice Float?
+  minimumVendorPrice     Float?
+
+  maxAttempts      Int @default(3)
+  maxCounterOffers Int @default(2)
+
+  allowPriceIncrease      Boolean @default(false)
+  allowVendorCounterOffer Boolean @default(true)
+
+  requireHumanApprovalAbove Float?
+  autoStopOnConditionChange Boolean @default(true)
+
+  createdById String?
+  updatedById String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  requirement Requirement              @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+  fields      NegotiationFieldPolicy[]
+  sessions    NegotiationSession[]
+}
+
+model NegotiationFieldPolicy {
+  id       String @id @default(uuid())
+  policyId String
+
+  field            String
+  enabled          Boolean @default(true)
+  requiresApproval Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  policy NegotiationPolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+
+  @@unique([policyId, field])
+}
+
+model NegotiationSession {
+  id                String  @id @default(uuid())
+  negotiationNumber String  @unique
+  callId            String  @unique
+  requirementId     String
+  vendorId          String
+  quoteId           String?
+
+  policyId String?
+
+  status NegotiationStatus @default(NEGOTIATION_NOT_STARTED)
+  mode   NegotiationMode   @default(AI_ASSISTED)
+
+  targetPrice            Float?
+  maximumAuthorizedPrice Float?
+  minimumVendorPrice     Float?
+
+  currency String @default("INR")
+
+  maxAttempts  Int @default(3)
+  attemptCount Int @default(0)
+
+  currentVendorPrice   Float?
+  currentOfferPrice    Float?
+  finalNegotiatedPrice Float?
+
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  createdById String?
+  updatedAt   DateTime @updatedAt
+
+  call        VoiceCall          @relation(fields: [callId], references: [id], onDelete: Cascade)
+  requirement Requirement        @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+  vendor      Vendor             @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  policy      NegotiationPolicy? @relation(fields: [policyId], references: [id], onDelete: SetNull)
+
+  attempts    NegotiationAttempt[]
+  escalations NegotiationEscalation[]
+  evidences   NegotiationEvidence[]
+  result      NegotiationResult?
+
+  @@index([callId])
+  @@index([requirementId])
+  @@index([vendorId])
+  @@index([status])
+}
+
+model NegotiationAttempt {
+  id        String @id @default(uuid())
+  sessionId String
+
+  attemptNumber Int
+
+  speaker NegotiationSpeaker
+  action  NegotiationAction
+
+  proposedAmount Float?
+  currency       String?
+  previousAmount Float?
+
+  reason   String? @db.Text
+  message  String? @db.Text
+  language String?
+
+  status String?
+
+  createdAt DateTime @default(now())
+
+  session  NegotiationSession    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  evidence NegotiationEvidence[]
+}
+
+model NegotiationEvidence {
+  id        String  @id @default(uuid())
+  sessionId String
+  attemptId String?
+
+  sourceType String
+  sourceId   String?
+
+  sequenceNumber Int?
+  quotedText     String? @db.Text
+
+  createdAt DateTime @default(now())
+
+  session NegotiationSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  attempt NegotiationAttempt? @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+}
+
+model NegotiationEscalation {
+  id        String @id @default(uuid())
+  sessionId String
+
+  reason      String
+  description String?          @db.Text
+  status      EscalationStatus @default(OPEN)
+
+  assignedToId String?
+
+  createdAt  DateTime  @default(now())
+  resolvedAt DateTime?
+
+  session NegotiationSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+}
+
+model NegotiationResult {
+  id        String @id @default(uuid())
+  sessionId String @unique
+
+  status NegotiationResultStatus
+
+  initialVendorQuote   Float?
+  finalVendorQuote     Float?
+  finalNegotiatedPrice Float?
+
+  currency String?
+
+  vendorAccepted  Boolean @default(false)
+  vendorConfirmed Boolean @default(false)
+
+  conditions      Json?
+  unansweredItems Json?
+
+  reason  String? @db.Text
+  summary String? @db.Text
+
+  createdAt DateTime @default(now())
+
+  session NegotiationSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+}
+
+// =========================================================================
+// MODULE 11 — QUOTATION MANAGEMENT
+// =========================================================================
+
+enum QuotationStatus {
+  DRAFT
+  PENDING_CONFIRMATION
+  CONFIRMED
+  NEGOTIATED
+  UNDER_REVIEW
+  UNDER_COMPARISON
+  SELECTED
+  NOT_SELECTED
+  EXPIRED
+  CANCELLED
+  SUPERSEDED
+}
+
+enum QuotationSource {
+  MANUAL
+  CALL
+  AI_EXTRACTED
+  NEGOTIATED
+  IMPORTED
+}
+
+enum QuotationChargeType {
+  TOLL
+  LOADING
+  UNLOADING
+  WAITING
+  DRIVER_ALLOWANCE
+  FUEL_SURCHARGE
+  GST
+  PARKING
+  PERMIT
+  OTHER
+}
+
+enum QuotationChargeStatus {
+  INCLUDED
+  EXTRA
+  WAIVED
+  UNKNOWN
+  NOT_APPLICABLE
+}
+
+enum QuotationChargeCalculationType {
+  FIXED
+  PER_KM
+  PER_DAY
+  PER_HOUR
+  PERCENTAGE
+  ACTUAL
+  UNKNOWN
+}
+
+enum QuotationConditionType {
+  TOLL_CONDITION
+  LOADING_CONDITION
+  UNLOADING_CONDITION
+  DELIVERY_CONDITION
+  PAYMENT_CONDITION
+  ADVANCE_CONDITION
+  WAITING_CONDITION
+  VEHICLE_CONDITION
+  CARGO_CONDITION
+  OTHER
+}
+
+enum QuotationEvidenceSource {
+  CALL_TRANSCRIPT
+  CALL_EXTRACTION
+  CONVERSATION_ANALYSIS
+  NEGOTIATION
+  HUMAN_ENTRY
+}
+
+enum QuotationPaymentTermType {
+  FULL_ADVANCE
+  PARTIAL_ADVANCE
+  AFTER_DELIVERY
+  WEEKLY
+  CREDIT
+  OTHER
+  UNKNOWN
+}
+
+model Quotation {
+  id              String @id @default(uuid())
+  quotationNumber String @unique
+
+  requirementId String
+  vendorId      String
+  callId        String?
+  negotiationId String?
+
+  status QuotationStatus @default(DRAFT)
+
+  version           Int     @default(1)
+  parentQuotationId String?
+
+  initialAmount Decimal? @db.Decimal(12, 2)
+  finalAmount   Decimal? @db.Decimal(12, 2)
+
+  currency String @default("INR") @db.Char(3)
+
+  vendorConfirmed Boolean   @default(false)
+  confirmationAt  DateTime?
+
+  validFrom  DateTime?
+  validUntil DateTime?
+
+  estimatedPickupDate       DateTime?
+  estimatedDeliveryDate     DateTime?
+  estimatedDeliveryDuration String?
+
+  notes String? @db.Text
+
+  source QuotationSource @default(MANUAL)
+
+  createdById String
+  updatedById String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  requirement         Requirement                    @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+  vendor              Vendor                         @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  call                VoiceCall?                     @relation(fields: [callId], references: [id], onDelete: SetNull)
+  parentQuotation     Quotation?                     @relation("QuotationHistory", fields: [parentQuotationId], references: [id], onDelete: SetNull)
+  childQuotations     Quotation[]                    @relation("QuotationHistory")
+  charges             QuotationCharge[]
+  conditions          QuotationCondition[]
+  evidence            QuotationEvidence[]
+  confirmations       QuotationConfirmation[]
+  paymentTerms        QuotationPaymentTerm[]
+  requirementSnaps    QuotationRequirementSnapshot[]
+  reviews             QuotationReview[]
+  comparisonItems     QuotationComparisonItem[]
+  shortlists          QuotationComparisonShortlist[]
+  selectedInDecisions ProcurementDecision[]
+  decisionItems       ProcurementDecisionItem[]
+
+  @@index([requirementId])
+  @@index([vendorId])
+  @@index([status])
+  @@index([quotationNumber])
+}
+
+model QuotationCharge {
+  id          String @id @default(uuid())
+  quotationId String
+
+  type QuotationChargeType
+  name String?
+
+  amount   Decimal? @db.Decimal(12, 2)
+  currency String?  @default("INR") @db.Char(3)
+
+  status          QuotationChargeStatus          @default(UNKNOWN)
+  calculationType QuotationChargeCalculationType @default(FIXED)
+
+  description String? @db.Text
+
+  source     QuotationSource @default(MANUAL)
+  evidenceId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+}
+
+model QuotationCondition {
+  id          String @id @default(uuid())
+  quotationId String
+
+  type        QuotationConditionType
+  description String                 @db.Text
+
+  status String?
+
+  explicit   Boolean @default(false)
+  confidence Float?
+
+  evidenceId String?
+
+  createdAt DateTime @default(now())
+
+  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+}
+
+model QuotationEvidence {
+  id          String @id @default(uuid())
+  quotationId String
+
+  field      String
+  sourceType QuotationEvidenceSource
+  sourceId   String?
+
+  transcriptId   String?
+  sequenceNumber Int?
+
+  quotedText String @db.Text
+
+  createdAt DateTime @default(now())
+
+  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+}
+
+model QuotationConfirmation {
+  id          String @id @default(uuid())
+  quotationId String
+
+  confirmedBy      String?
+  confirmationType String
+
+  confirmedAmount Decimal? @db.Decimal(12, 2)
+  currency        String?  @default("INR") @db.Char(3)
+
+  confirmedAt DateTime @default(now())
+
+  callId         String?
+  transcriptId   String?
+  sequenceNumber Int?
+
+  evidenceText String? @db.Text
+
+  createdAt DateTime @default(now())
+
+  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+}
+
+model QuotationPaymentTerm {
+  id          String @id @default(uuid())
+  quotationId String
+
+  type        QuotationPaymentTermType
+  description String?                  @db.Text
+
+  advanceAmount     Decimal? @db.Decimal(12, 2)
+  advancePercentage Float?
+
+  remainingPaymentCondition String? @db.Text
+
+  evidenceId String?
+
+  createdAt DateTime @default(now())
+
+  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+}
+
+model QuotationRequirementSnapshot {
+  id          String @id @default(uuid())
+  quotationId String
+
+  pickupLocation   String
+  deliveryLocation String
+  cargoType        String
+  cargoWeight      Float
+  cargoWeightUnit  CargoWeightUnit
+  vehicleType      String
+  pickupDate       DateTime?
+  deliveryDeadline DateTime?
+
+  createdAt DateTime @default(now())
+
+  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+}
+
+model QuotationReview {
+  id          String @id @default(uuid())
+  quotationId String
+
+  reviewedById String
+
+  action String
+  reason String? @db.Text
+
+  createdAt DateTime @default(now())
+
+  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+}
+
+// =========================================================================
+// MODULE 12 — QUOTATION COMPARISON ENGINE
+// =========================================================================
+
+enum ComparisonStatus {
+  DRAFT
+  READY
+  UNDER_REVIEW
+  DECISION_PENDING
+  COMPLETED
+  CANCELLED
+  SUPERSEDED
+}
+
+enum RequirementMismatchType {
+  PICKUP_LOCATION
+  DELIVERY_LOCATION
+  CARGO_TYPE
+  CARGO_WEIGHT
+  VEHICLE_TYPE
+  VEHICLE_BODY
+  PICKUP_DATE
+  DELIVERY_DEADLINE
+  SPECIAL_HANDLING
+  CAPACITY
+  OTHER
+}
+
+enum RequirementMismatchSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+model QuotationComparison {
+  id               String @id @default(uuid())
+  comparisonNumber String @unique
+
+  requirementId String
+
+  status  ComparisonStatus @default(DRAFT)
+  version Int              @default(1)
+
+  createdById String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  requirement          Requirement                    @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+  items                QuotationComparisonItem[]
+  shortlists           QuotationComparisonShortlist[]
+  states               ComparisonState[]
+  procurementDecisions ProcurementDecision[]
+}
+
+model QuotationComparisonItem {
+  id           String @id @default(uuid())
+  comparisonId String
+  quotationId  String
+  vendorId     String
+
+  displayOrder Int @default(0)
+
+  finalAmount Decimal? @db.Decimal(12, 2)
+  currency    String?  @default("INR") @db.Char(3)
+
+  knownAdditionalCharges       Int      @default(0)
+  knownAdditionalChargesAmount Decimal? @db.Decimal(12, 2)
+
+  unknownChargeCount Int @default(0)
+
+  knownTotalAmount  Decimal? @db.Decimal(12, 2)
+  totalAmountStatus String?
+
+  deliveryDuration String?
+  quoteValidity    DateTime?
+
+  vendorConfirmed   Boolean @default(false)
+  quoteCompleteness Int     @default(0)
+
+  createdAt DateTime @default(now())
+
+  comparison QuotationComparison   @relation(fields: [comparisonId], references: [id], onDelete: Cascade)
+  quotation  Quotation             @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  vendor     Vendor                @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  mismatches RequirementMismatch[]
+}
+
+model RequirementMismatch {
+  id               String @id @default(uuid())
+  comparisonItemId String
+
+  type     RequirementMismatchType
+  severity RequirementMismatchSeverity
+
+  requirementValue String? @db.Text
+  quotationValue   String? @db.Text
+
+  description String? @db.Text
+  source      String?
+
+  createdAt DateTime @default(now())
+
+  item QuotationComparisonItem @relation(fields: [comparisonItemId], references: [id], onDelete: Cascade)
+}
+
+model QuotationComparisonShortlist {
+  id           String @id @default(uuid())
+  comparisonId String
+  quotationId  String
+  createdById  String
+
+  createdAt DateTime  @default(now())
+  removedAt DateTime?
+
+  comparison QuotationComparison @relation(fields: [comparisonId], references: [id], onDelete: Cascade)
+  quotation  Quotation           @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+}
+
+model ComparisonState {
+  id           String @id @default(uuid())
+  comparisonId String
+  userId       String
+
+  selectedColumns String? @db.Text
+  sortField       String?
+  sortDirection   String?
+  filters         String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  comparison QuotationComparison @relation(fields: [comparisonId], references: [id], onDelete: Cascade)
+}
+
+// =========================================================================
+// MODULE 13 — PROCUREMENT DECISION DASHBOARD
+// =========================================================================
+
+enum ProcurementDecisionStatus {
+  DRAFT
+  PENDING_DECISION
+  CONFIRMED
+  CANCELLED
+  SUPERSEDED
+}
+
+enum ProcurementItemDecisionStatus {
+  SELECTED
+  NOT_SELECTED
+  REVIEWED
+  NOT_REVIEWED
+}
+
+enum ProcurementDecisionAuditAction {
+  DECISION_CREATED
+  DECISION_VIEWED
+  QUOTATION_REVIEWED
+  EVIDENCE_VIEWED
+  SELECTION_STARTED
+  QUOTATION_SELECTED
+  SELECTION_CONFIRMED
+  SELECTION_CANCELLED
+  DECISION_SUPERSEDED
+}
+
+model ProcurementDecision {
+  id String @id @default(uuid())
+
+  decisionNumber String @unique
+
+  requirementId String
+  comparisonId  String?
+
+  status ProcurementDecisionStatus
+
+  selectedQuotationId String?
+  selectedVendorId    String?
+
+  decisionReason String? @db.Text
+  decisionNotes  String? @db.Text
+
+  confirmedById String?
+  confirmedAt   DateTime?
+
+  version Int @default(1)
+
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  requirement Requirement          @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+  comparison  QuotationComparison? @relation(fields: [comparisonId], references: [id], onDelete: SetNull)
+
+  selectedQuotation Quotation? @relation(fields: [selectedQuotationId], references: [id], onDelete: SetNull)
+  selectedVendor    Vendor?    @relation(fields: [selectedVendorId], references: [id], onDelete: SetNull)
+
+  createdBy   User  @relation("ProcurementDecisionCreatedBy", fields: [createdById], references: [id])
+  confirmedBy User? @relation("ProcurementDecisionConfirmedBy", fields: [confirmedById], references: [id])
+
+  items        ProcurementDecisionItem[]
+  auditEntries ProcurementDecisionAudit[]
+  snapshots    ProcurementDecisionSnapshot[]
+
+  @@index([requirementId])
+  @@index([selectedVendorId])
+  @@index([selectedQuotationId])
+  @@index([status])
+}
+
+model ProcurementDecisionItem {
+  id String @id @default(uuid())
+
+  decisionId  String
+  quotationId String
+  vendorId    String
+
+  decisionStatus ProcurementItemDecisionStatus
+
+  selectionReason String? @db.Text
+
+  createdAt DateTime @default(now())
+
+  decision ProcurementDecision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+
+  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  vendor    Vendor    @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@unique([decisionId, quotationId])
+  @@index([decisionId])
+  @@index([quotationId])
+  @@index([vendorId])
+}
+
+model ProcurementDecisionAudit {
+  id String @id @default(uuid())
+
+  decisionId String
+
+  action ProcurementDecisionAuditAction
+
+  userId String?
+
+  previousValue Json?
+  newValue      Json?
+
+  metadata Json?
+
+  createdAt DateTime @default(now())
+
+  decision ProcurementDecision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  user     User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([decisionId])
+  @@index([createdAt])
+}
+
+model ProcurementDecisionSnapshot {
+  id String @id @default(uuid())
+
+  decisionId String
+
+  requirementData Json
+  vendorData      Json
+  quotationData   Json
+  comparisonData  Json?
+
+  createdAt DateTime @default(now())
+
+  decision ProcurementDecision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+
+  @@index([decisionId])
+}
+
+// --- MODULE 14: CALL HISTORY & RECORDING ---
+
+enum RecordingStorageProvider {
+  SUPABASE
+  S3
+  EXOTEL
+  EXTERNAL
+}
+
+enum CallRecordingStatus {
+  PENDING
+  PROCESSING
+  AVAILABLE
+  FAILED
+  DELETED
+  UNAVAILABLE
+}
+
+enum RecordingAccessAction {
+  PLAY
+  DOWNLOAD
+  VIEW
+}
+
+enum RecordingDisclosureStatus {
+  NOT_REQUIRED
+  DISCLOSED
+  DECLINED
+  UNKNOWN
+}
+
+model CallRecording {
+  id String @id @default(cuid())
+
+  callId String @unique
+
+  storageProvider RecordingStorageProvider
+  storageKey      String
+
+  originalFileName String?
+  mimeType         String?
+  fileSizeBytes    BigInt?
+
+  durationSeconds Int?
+
+  status CallRecordingStatus
+
+  recordingStartedAt DateTime?
+  recordingEndedAt   DateTime?
+
+  checksum String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  call       VoiceCall                @relation(fields: [callId], references: [id])
+  accessLogs CallRecordingAccessLog[]
+
+  @@unique([storageProvider, storageKey])
+  @@index([callId])
+  @@index([status])
+}
+
+model CallRecordingAccessLog {
+  id String @id @default(cuid())
+
+  recordingId String
+  userId      String?
+
+  action RecordingAccessAction
+
+  ipAddress String?
+  userAgent String?
+
+  createdAt DateTime @default(now())
+
+  recording CallRecording @relation(fields: [recordingId], references: [id])
+  user      User?         @relation(fields: [userId], references: [id])
+
+  @@index([recordingId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// --- MODULE 15: FOLLOW-UP & RETRY MANAGEMENT ---
+
+enum FollowUpType {
+  RETRY
+  CALLBACK
+  MANUAL_FOLLOW_UP
+  QUOTE_CLARIFICATION
+  NEGOTIATION_FOLLOW_UP
+  AVAILABILITY_CONFIRMATION
+}
+
+enum FollowUpReason {
+  NO_ANSWER
+  BUSY
+  CALL_FAILED
+  VENDOR_REQUESTED_CALLBACK
+  VENDOR_REQUESTED_LATER_CALL
+  CALLBACK_TIME_EXTRACTED
+  QUOTE_CLARIFICATION_REQUIRED
+  DELIVERY_CONFIRMATION_REQUIRED
+  PRICE_CONFIRMATION_REQUIRED
+  HUMAN_REQUESTED
+  NEGOTIATION_CONTINUATION
+  OTHER
+}
+
+enum FollowUpStatus {
+  PENDING
+  SCHEDULED
+  READY
+  CALLING
+  COMPLETED
+  CANCELLED
+  EXPIRED
+  FAILED
+  FOLLOW_UP_REQUIRED
+  SKIPPED
+}
+
+enum FollowUpTimeSource {
+  VENDOR_EXPLICIT
+  AI_EXTRACTED
+  USER_SELECTED
+  RETRY_POLICY
+  SYSTEM
+}
+
+enum FollowUpAttemptStatus {
+  PENDING
+  INITIATING
+  RINGING
+  CONNECTED
+  COMPLETED
+  NO_ANSWER
+  BUSY
+  FAILED
+  CANCELLED
+}
+
+enum FollowUpAttemptResult {
+  QUOTE_RECEIVED
+  AVAILABLE
+  NOT_AVAILABLE
+  CALLBACK_REQUESTED
+  NO_ANSWER
+  BUSY
+  FAILED
+  ESCALATED
+  COMPLETED_WITHOUT_QUOTE
+}
+
+enum FollowUpAuditAction {
+  FOLLOW_UP_CREATED
+  FOLLOW_UP_SCHEDULED
+  FOLLOW_UP_RESCHEDULED
+  FOLLOW_UP_CANCELLED
+  FOLLOW_UP_STARTED
+  FOLLOW_UP_COMPLETED
+  FOLLOW_UP_FAILED
+  RETRY_CREATED
+  RETRY_EXECUTED
+  FOLLOW_UP_REQUIRED
+  FOLLOW_UP_ASSIGNED
+  FOLLOW_UP_MARKED_COMPLETE
+}
+
+model FollowUp {
+  id             String @id @default(cuid())
+  followUpNumber String @unique
+
+  requirementId    String
+  vendorId         String
+  sourceCallId     String?
+  parentFollowUpId String?
+
+  type   FollowUpType
+  reason FollowUpReason
+  status FollowUpStatus
+
+  scheduledAt DateTime?
+  expiresAt   DateTime?
+
+  attemptNumber Int @default(1)
+  maxAttempts   Int @default(3)
+
+  requestedByUserId String?
+  assignedToUserId  String?
+
+  requestedTimeText   String?
+  requestedTimeSource FollowUpTimeSource?
+
+  notes String?
+
+  completedAt DateTime?
+  cancelledAt DateTime?
+
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  requirement Requirement @relation(fields: [requirementId], references: [id])
+  vendor      Vendor      @relation(fields: [vendorId], references: [id])
+
+  sourceCall     VoiceCall? @relation(fields: [sourceCallId], references: [id])
+  parentFollowUp FollowUp?  @relation("FollowUpChain", fields: [parentFollowUpId], references: [id])
+  childFollowUps FollowUp[] @relation("FollowUpChain")
+
+  requestedByUser User? @relation("FollowUpRequestedBy", fields: [requestedByUserId], references: [id])
+  assignedToUser  User? @relation("FollowUpAssignedTo", fields: [assignedToUserId], references: [id])
+  createdBy       User  @relation("FollowUpCreatedBy", fields: [createdById], references: [id])
+
+  attempts     FollowUpAttempt[]
+  auditEntries FollowUpAudit[]
+
+  @@index([requirementId])
+  @@index([vendorId])
+  @@index([sourceCallId])
+  @@index([status])
+  @@index([scheduledAt])
+}
+
+model FollowUpAttempt {
+  id String @id @default(cuid())
+
+  followUpId String
+  callId     String?
+
+  attemptNumber Int
+
+  status FollowUpAttemptStatus
+
+  scheduledAt DateTime?
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  result FollowUpAttemptResult?
+
+  failureReason String?
+
+  createdAt DateTime @default(now())
+
+  followUp FollowUp   @relation(fields: [followUpId], references: [id])
+  call     VoiceCall? @relation("FollowUpAttemptCall", fields: [callId], references: [id])
+
+  @@unique([followUpId, attemptNumber])
+  @@index([followUpId])
+  @@index([callId])
+}
+
+model FollowUpPolicy {
+  id String @id @default(cuid())
+
+  name String
+
+  enabled Boolean @default(true)
+
+  maxAttempts Int @default(3)
+
+  retryOnNoAnswer Boolean @default(true)
+  retryOnBusy     Boolean @default(true)
+  retryOnFailure  Boolean @default(true)
+
+  retryDelayMinutes       Int @default(30)
+  secondRetryDelayMinutes Int @default(60)
+  callbackGraceMinutes    Int @default(10)
+
+  callingWindowStart String?
+  callingWindowEnd   String?
+
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model FollowUpAudit {
+  id String @id @default(cuid())
+
+  followUpId String
+  action     FollowUpAuditAction
+  userId     String?
+
+  previousStatus FollowUpStatus?
+  newStatus      FollowUpStatus?
+
+  metadata Json?
+
+  createdAt DateTime @default(now())
+
+  followUp FollowUp @relation(fields: [followUpId], references: [id])
+  user     User?    @relation("FollowUpAuditUser", fields: [userId], references: [id])
+
+  @@index([followUpId])
+  @@index([createdAt])
+}
+
+enum AIProvider {
+  GEMINI
+  OPENAI
+  OTHER
+}
+
+model AIProviderConfig {
+  id          String     @id @default(cuid())
+  provider    AIProvider
+  displayName String
+
+  enabled        Boolean @default(false)
+  secretRef      String?
+  baseUrl        String?
+  organizationId String?
+
+  priority   Int @default(100)
+  timeoutMs  Int @default(30000)
+  maxRetries Int @default(2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  models AIModelConfig[]
+}
+
+model AIModelConfig {
+  id String @id @default(cuid())
+
+  providerId String
+  provider   AIProviderConfig @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  modelName String
+  enabled   Boolean @default(true)
+
+  inputPrice    Decimal?
+  outputPrice   Decimal?
+  maxTokens     Int?
+  temperature   Decimal?
+  contextWindow Int?
+  capabilities  Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AIFeatureConfig {
+  id         String @id @default(cuid())
+  featureKey String @unique
+
+  enabled    Boolean @default(true)
+  providerId String?
+  modelId    String?
+
+  temperature        Decimal?
+  maxTokens          Int?
+  timeoutMs          Int?
+  requireHumanReview Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum AIPromptStatus {
+  DRAFT
+  TESTING
+  PUBLISHED
+  RETIRED
+}
+
+model AIPrompt {
+  id        String @id @default(cuid())
+  promptKey String
+  version   Int
+  name      String
+
+  description  String?
+  systemPrompt String
+  userTemplate String?
+
+  status AIPromptStatus @default(DRAFT)
+
+  createdById   String
+  publishedById String?
+
+  createdAt   DateTime  @default(now())
+  publishedAt DateTime?
+  retiredAt   DateTime?
+
+  @@unique([promptKey, version])
+}
+
+enum VoiceLanguage {
+  TA
+  TA_EN
+  EN
+  HI
+}
+
+model VoiceConfig {
+  id String @id @default(cuid())
+
+  language    VoiceLanguage
+  sttProvider String
+  ttsProvider String
+  voice       String?
+
+  speechSpeed        Decimal?
+  silenceTimeoutMs   Int      @default(5000)
+  bargeInEnabled     Boolean  @default(true)
+  maxCallDurationSec Int      @default(900)
+
+  recordingEnabled    Boolean @default(false)
+  aiDisclosureEnabled Boolean @default(true)
+  enabled             Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model TelephonyConfig {
+  id       String  @id @default(cuid())
+  provider String
+  enabled  Boolean @default(false)
+  callerId String?
+
+  recordingEnabled Boolean @default(false)
+  callTimeoutSec   Int     @default(60)
+
+  webhookEnabled        Boolean @default(true)
+  mediaStreamingEnabled Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CallingPolicy {
+  id String @id @default(cuid())
+
+  name    String
+  enabled Boolean @default(true)
+
+  maxCallDurationSec Int    @default(900)
+  callingWindowStart String @default("09:00")
+  callingWindowEnd   String @default("20:00")
+  maxAttempts        Int    @default(3)
+
+  retryOnNoAnswer Boolean @default(true)
+  retryOnBusy     Boolean @default(true)
+  retryOnFailure  Boolean @default(true)
+
+  recordingEnabled     Boolean @default(false)
+  aiDisclosureRequired Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model SystemSetting {
+  id String @id @default(cuid())
+
+  category String
+  key      String
+  value    Json
+
+  description String?
+  updatedById String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([category, key])
+}
+
+model AIUsageRecord {
+  id String @id @default(cuid())
+
+  provider   String
+  model      String
+  featureKey String
+
+  requirementId String?
+  vendorId      String?
+  callId        String?
+
+  inputTokens  Int?
+  outputTokens Int?
+  totalTokens  Int?
+
+  estimatedCost Decimal?
+  currency      String?
+  latencyMs     Int?
+
+  success   Boolean
+  errorCode String?
+
+  promptKey     String?
+  promptVersion Int?
+
+  createdAt DateTime @default(now())
+}
+
+model ProviderPricingConfig {
+  id String @id @default(cuid())
+
+  provider String
+  model    String
+
+  inputPrice  Decimal?
+  outputPrice Decimal?
+
+  currency      String   @default("USD")
+  effectiveFrom DateTime
+
+  createdAt DateTime @default(now())
+}
