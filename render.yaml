@@ -55,7 +55,7 @@ services:
     env: node
     buildCommand: "cd frontend && npm install && npm run build"
     startCommand: "cd frontend && npm start"
-    plan: starter
+    plan: free
     envVars:
       - key: NODE_ENV
         value: production
