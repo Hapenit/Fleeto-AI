@@ -1,9 +1,11 @@
-services:
-  # PostgreSQL Database
-  - type: pgo
-    name: fleeto-db
+databases:
+  - name: fleeto-db
+    databaseName: fleetodb
+    user: fleeto
     plan: free # Change to a paid plan for production
-    version: 16
+    postgresMajorVersion: "16"
+
+services:
 
   # NestJS Backend
   - type: web
