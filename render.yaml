@@ -1,0 +1,61 @@
+services:
+  # PostgreSQL Database
+  - type: pgo
+    name: fleeto-db
+    plan: free # Change to a paid plan for production
+    version: 16
+
+  # NestJS Backend
+  - type: web
+    name: fleeto-backend
+    env: node
+    buildCommand: "cd backend && npm install && npx prisma generate && npm run build"
+    startCommand: "cd backend && npm run start:prod"
+    plan: starter # Render requires starter or higher for background jobs/good memory, can be free
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: fleeto-db
+          property: connectionString
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3001"
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: ACCESS_TOKEN_EXPIRES_IN
+        value: 15m
+      - key: REFRESH_TOKEN_EXPIRES_IN
+        value: 7d
+      - key: FRONTEND_URL
+        value: "https://fleeto-frontend.onrender.com"
+      - key: EXOTEL_APP_URL
+        value: "https://fleeto-backend.onrender.com/api/call-recordings/webhooks/provider" 
+      # Provide these securely in the Render dashboard or set sync values here
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: SARVAM_API_KEY
+        sync: false
+      - key: EXOTEL_SID
+        sync: false
+      - key: EXOTEL_API_KEY
+        sync: false
+      - key: EXOTEL_API_TOKEN
+        sync: false
+      - key: EXOTEL_CALLER_ID
+        sync: false
+
+  # Next.js Frontend
+  - type: web
+    name: fleeto-frontend
+    env: node
+    buildCommand: "cd frontend && npm install && npm run build"
+    startCommand: "cd frontend && npm start"
+    plan: starter
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_API_URL
+        value: "https://fleeto-backend.onrender.com/api"
