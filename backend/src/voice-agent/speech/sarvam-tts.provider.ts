@@ -16,9 +16,9 @@ export class SarvamTTSProvider implements TextToSpeechProvider {
     try {
       const response = await this.client.textToSpeech.convert({
         text: text,
-        language_code: 'ta-IN',
-        speaker: 'meera' as any, // Or whatever valid speaker ID needed
-      });
+        languageCode: 'ta-IN',
+        speaker: 'meera',
+      } as any);
 
       // The SDK returns base64 encoded audio string
       const audioBuffer = Buffer.from(response.audios[0], 'base64');

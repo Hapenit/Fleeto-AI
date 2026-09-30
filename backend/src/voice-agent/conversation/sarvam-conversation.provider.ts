@@ -25,9 +25,9 @@ export class SarvamConversationProvider implements ConversationProvider {
           { role: 'user', content: "Generate the JSON response for the next turn." }
         ],
         temperature: 0.1, // Keep it deterministic for JSON structure
-      });
+      } as any);
 
-      const text = response.choices[0]?.message?.content ?? '';
+      const text = (response as any).choices[0]?.message?.content ?? '';
       
       // Cleanup markdown block if present
       const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();      
