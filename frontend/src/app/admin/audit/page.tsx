@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { api } from '@/lib/api';
 
 type AuditLog = {
   createdAt: string;
@@ -17,7 +18,7 @@ export default function AuditPage() {
     setLoading(true);
     try {
       const res = await api.get('/api/audit');
-      setLogs(res.data);
+      setLogs(res.data as any[]);
     } catch (error) {
       console.error(error);
     } finally {

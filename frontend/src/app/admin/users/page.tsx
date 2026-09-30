@@ -15,7 +15,7 @@ export default function UsersPage() {
     setLoading(true);
     try {
       const res = await api.get('/api/users'); 
-      setUsers(res.data); 
+      setUsers(res.data as any[]); 
     } catch (e) {
       console.error(e);
     } finally {
