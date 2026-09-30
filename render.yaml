@@ -11,7 +11,7 @@ services:
   - type: web
     name: fleeto-backend
     env: node
-    buildCommand: "cd backend && npm install && npx prisma generate && npm run build"
+    buildCommand: "cd backend && npm install --include=dev && npx prisma generate && npm run build"
     startCommand: "cd backend && npm run start:prod"
     plan: free # Render requires starter or higher for background jobs/good memory, can be free
     envVars:
@@ -53,7 +53,7 @@ services:
   - type: web
     name: fleeto-frontend
     env: node
-    buildCommand: "cd frontend && npm install && npm run build"
+    buildCommand: "cd frontend && npm install --include=dev && npm run build"
     startCommand: "cd frontend && npm start"
     plan: free
     envVars:
