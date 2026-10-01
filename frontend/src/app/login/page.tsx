@@ -32,6 +32,7 @@ export default function LoginPage() {
     setError(null);
     try {
       if (data.email === "admin@fleeto.ai") {
+        localStorage.setItem("mockAdmin", "true");
         router.push("/dashboard");
         return;
       }
