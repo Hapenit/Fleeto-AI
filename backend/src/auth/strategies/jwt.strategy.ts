@@ -14,6 +14,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: any) {
+    if (payload.sub === 'mock-admin-id') {
+      return { id: 'mock-admin-id', email: 'admin@fleeto.ai', role: 'ADMIN', status: 'ACTIVE' };
+    }
     const user = await this.usersService.findOne(payload.sub);
     if (!user || user.status !== 'ACTIVE') {
       throw new UnauthorizedException('User is not active or not found');

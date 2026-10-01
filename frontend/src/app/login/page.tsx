@@ -31,10 +31,15 @@ export default function LoginPage() {
     setIsLoading(true);
     setError(null);
     try {
-      await fetchApi("/auth/login", {
+      const res = await fetchApi("/auth/login", {
         method: "POST",
         body: JSON.stringify(data),
       });
+      
+      if (res.data?.accessToken) {
+        localStorage.setItem("accessToken", res.data.accessToken);
+      }
+      
       router.push("/requirements");
     } catch (err: any) {
       setError(err.message || "Failed to login. Please try again.");

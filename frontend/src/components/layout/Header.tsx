@@ -24,6 +24,9 @@ export default function Header() {
   }, [router]);
 
   const handleLogout = async () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem("accessToken");
+    }
     try {
       await fetchApi("/auth/logout", { method: "POST" });
     } catch (err) {
