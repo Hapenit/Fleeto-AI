@@ -12,10 +12,6 @@ export default function Header() {
 
   useEffect(() => {
     async function loadUser() {
-      if (typeof window !== 'undefined' && localStorage.getItem("mockAdmin") === "true") {
-        setUser({ firstName: "Mock", lastName: "Admin", role: "ADMIN", email: "admin@fleeto.ai" });
-        return;
-      }
       try {
         const res = await fetchApi("/auth/me");
         setUser(res.data);
@@ -28,9 +24,6 @@ export default function Header() {
   }, [router]);
 
   const handleLogout = async () => {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem("mockAdmin");
-    }
     try {
       await fetchApi("/auth/logout", { method: "POST" });
     } catch (err) {

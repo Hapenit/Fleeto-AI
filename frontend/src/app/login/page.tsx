@@ -31,17 +31,11 @@ export default function LoginPage() {
     setIsLoading(true);
     setError(null);
     try {
-      if (data.email === "admin@fleeto.ai") {
-        localStorage.setItem("mockAdmin", "true");
-        router.push("/dashboard");
-        return;
-      }
-
       await fetchApi("/auth/login", {
         method: "POST",
         body: JSON.stringify(data),
       });
-      router.push("/dashboard");
+      router.push("/requirements");
     } catch (err: any) {
       setError(err.message || "Failed to login. Please try again.");
     } finally {

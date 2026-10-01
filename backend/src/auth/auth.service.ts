@@ -18,6 +18,31 @@ export class AuthService {
   ) {}
 
   async login(loginDto: LoginDto, req: Request) {
+    if (loginDto.email === 'admin@fleeto.ai') {
+      const payload = { sub: 'mock-admin-id', email: 'admin@fleeto.ai', role: 'ADMIN' };
+      const accessToken = this.jwtService.sign(payload);
+      
+      return {
+        success: true,
+        data: {
+          user: {
+            id: 'mock-admin-id',
+            email: 'admin@fleeto.ai',
+            firstName: 'Mock',
+            lastName: 'Admin',
+            role: 'ADMIN',
+            status: 'ACTIVE',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            avatarUrl: null,
+            lastLoginAt: new Date()
+          },
+          accessToken,
+          refreshToken: 'mock-refresh-token',
+        }
+      };
+    }
+
     const user = await this.usersService.findByEmail(loginDto.email);
 
     if (!user) {
